@@ -345,7 +345,7 @@ void updateInfo() {
         dma_display->print("A.M");
     }
 
-    if (time.tm_hour == 0) {
+    if (time.tm_hour == 0 && time.tm_min == 0) {
         updateDate(time);
     }
 }

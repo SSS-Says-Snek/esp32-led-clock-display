@@ -46,6 +46,7 @@ std::string API_REQUEST = std::string{"http://api.open-meteo.com/v1/forecast?lat
 
 int prevMinute = 0;
 int prevMinute15 = 0;
+TaskHandle_t weatherTaskHandle;
 
 unsigned long prevUpdateMillis = 0;
 
@@ -237,29 +238,31 @@ void addScrollingText(const std::string& text, const GFXfont* font, int startX, 
 }
 
 void requestWeatherTask(void* parameters) {
-    http.begin(API_REQUEST.c_str());
+    HTTPClient http;
+    for (;;) {
+        vTaskSuspend(NULL);
+        http.begin(API_REQUEST.c_str());
 
-    int httpResponseCode = http.GET();
-    Serial.print("HTTP Response code: ");
-    Serial.println(httpResponseCode);
+        int httpResponseCode = http.GET();
+        Serial.print("HTTP Response code: ");
+        Serial.println(httpResponseCode);
 
-    if (httpResponseCode == 200) {
-        String payload = http.getString();
-        Serial.println(payload);
+        if (httpResponseCode == 200) {
+            String payload = http.getString();
+            Serial.println(payload);
 
-        JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, payload);
-        if (error) {
-            Serial.print("deserializeJson() returned ");
-            Serial.println(error.c_str());
-            vTaskDelete(NULL);
-            return;
+            JsonDocument doc;
+            DeserializationError error = deserializeJson(doc, payload);
+            if (error) {
+                Serial.print("deserializeJson() returned ");
+                Serial.println(error.c_str());
+                continue;
+            }
+
+            updateWeather(doc);
         }
-
-        updateWeather(doc);
+        http.end();
     }
-    http.end();
-    vTaskDelete(NULL);
 }
 
 // Non-RTOS version
@@ -314,17 +317,9 @@ void updateInfo() {
     if (minDiff < 0) {
         minDiff += 60;
     }
-    if (minDiff == 15) { // Been 15 minutes 
+    if (minDiff == 2) { // Been 15 minutes 
         Serial.println("Requesting weather");
-        xTaskCreatePinnedToCore(
-            requestWeatherTask,
-            "Weather HTTP",
-            8192,
-            NULL,
-            1,
-            NULL,
-            1
-        );
+        vTaskResume(weatherTaskHandle);
         prevMinute15 = time.tm_min;
     }
 
@@ -383,6 +378,16 @@ void setup() {
     }
 
     prevMinute15 = time.tm_min;
+
+    xTaskCreatePinnedToCore(
+        requestWeatherTask,
+        "Weather HTTP",
+        8192,
+        NULL,
+        1,
+        &weatherTaskHandle,
+        1
+    );
 
     updateDate(time);
     http.setReuse(false);

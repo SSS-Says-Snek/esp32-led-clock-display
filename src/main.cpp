@@ -14,9 +14,11 @@
 // #include "Naxaci9pt7b.h"
 
 
-#include ".env.h" // Defines WIFI_SSID, WIFI_PASSWORD, LAT, and LON
+#include ".env.h" // Defines WIFI_SSID, WIFI_PASSWORD, LAT, LON, and NEWS_API_KEY
 #include "DayNightIcons.h"
 #include "ScrollingText.h"
+#include "ApiTask.h"
+#include "Utils.h"
 
 MatrixPanel_I2S_DMA* dma_display = nullptr;
 std::vector<ScrollingText> scrollingTexts;
@@ -42,86 +44,19 @@ const char* NTP_SERVER = "pool.ntp.org";
 const char* DAYS_OF_WEEK[] = {"Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"};
 const char* MONTHS[] = {"Jan.", "Feb.", "Mar.", "Apr.", "May.", "Jun.", "Jul.", "Aug.", "Sep.", "Oct.", "Nov.", "Dec."};
 
-std::string API_REQUEST = std::string{"http://api.open-meteo.com/v1/forecast?latitude="} + LAT + "&longitude=" + LON + "&current=temperature_2m,is_day,rain,weather_code,cloud_cover,wind_speed_10m&timezone=America%2FChicago&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch";
-
 int prevMinute = 0;
 int prevMinute15 = 0;
 TaskHandle_t weatherTaskHandle;
 
 unsigned long prevUpdateMillis = 0;
 
-HTTPClient http;
+enum class TopBarStatus {
+    WEATHER,
+    NEWS
+};
+TopBarStatus currentTopStatus = TopBarStatus::WEATHER;
 
-std::pair<const char*, int> wmoCodeToStr(int wmoCode, int isDay) {
-    switch (wmoCode) {
-        case 0:
-        case 1:
-            if (isDay) {
-                return std::make_pair("Sunny", YELLOW);
-            }
-            return std::make_pair("Clear", YELLOW);
-        case 2:
-        case 3:
-            return std::make_pair("Cloudy", GRAY);
-        case 45:
-        case 48:
-            return std::make_pair("Foggy", GRAY);
-        case 51:
-        case 53:
-            return std::make_pair("Drizzle", BLUE);
-        case 55:
-            return std::make_pair("Drizzle", STORM_BLUE);
-
-        case 61:
-        case 64:
-            return std::make_pair("Rainy", RAIN_BLUE);
-        case 65:
-            return std::make_pair("Rainy", STORM_BLUE);
-
-        case 66:
-        case 67:
-            return std::make_pair("Fz.Rain", SNOW_BLUE);
-
-        case 71:
-        case 73:
-        case 75:
-        case 77:
-        case 85:
-        case 86:
-            return std::make_pair("Snowy", SNOW_BLUE);
-
-        case 80:
-        case 81:
-            return std::make_pair("Showers", RAIN_BLUE);
-        case 82:
-            return std::make_pair("Showers", STORM_BLUE);
-
-        case 95:
-        case 96:
-        case 99:
-            return std::make_pair("Thunder", STORM_BLUE);
-
-        default:
-            return std::make_pair("?????", PURPLE);
-    }
-}
-
-void drawXbm565(int x, int y, int width, int height, const char *xbm, uint16_t color = 0xffff) 
-{
-  if (width % 8 != 0) {
-      width =  ((width / 8) + 1) * 8;
-  }
-    for (int i = 0; i < width * height / 8; i++ ) {
-      unsigned char charColumn = pgm_read_byte(xbm + i);
-      for (int j = 0; j < 8; j++) {
-        int targetX = (i * 8 + j) % width + x;
-        int targetY = (8 * i / (width)) + y;
-        if (bitRead(charColumn, j)) {
-          dma_display->drawPixel(targetX, targetY, color);
-        }
-      }
-    }
-}
+TaskParams weatherTask;
 
 void setupMatrix() {
     // LED Matrix setup
@@ -223,10 +158,10 @@ void updateWeather(JsonDocument doc) {
     dma_display->print("F");
 
     if (current["is_day"]) {
-        drawXbm565(57, 0, 5, 7, sun_bits, YELLOW);
+        drawXbm565(dma_display, 57, 0, 5, 7, sun_bits, YELLOW);
         dma_display->setBrightness(128);
     } else {
-        drawXbm565(57, 0, 5, 7, moon_bits, YELLOW);
+        drawXbm565(dma_display, 57, 0, 5, 7, moon_bits, YELLOW);
         dma_display->setBrightness8(15);
     }
 }
@@ -238,62 +173,6 @@ void addScrollingText(const std::string& text, const GFXfont* font, int startX, 
     ScrollingText e = ScrollingText{dma_display, text, font, startX, startY, color, animDelay, scrollTextFinishCallback};
     scrollingTexts.push_back(e);
 }
-
-void requestWeatherTask(void* parameters) {
-    HTTPClient http;
-    for (;;) {
-        vTaskSuspend(NULL);
-        http.begin(API_REQUEST.c_str());
-
-        int httpResponseCode = http.GET();
-        Serial.print("HTTP Response code: ");
-        Serial.println(httpResponseCode);
-
-        if (httpResponseCode == 200) {
-            String payload = http.getString();
-            Serial.println(payload);
-
-            JsonDocument doc;
-            DeserializationError error = deserializeJson(doc, payload);
-            if (error) {
-                Serial.print("deserializeJson() returned ");
-                Serial.println(error.c_str());
-                continue;
-            }
-
-            updateWeather(doc);
-        }
-        http.end();
-    }
-}
-
-// Non-RTOS version
-void requestWeatherTask() {
-    http.setReuse(false);
-    http.begin(API_REQUEST.c_str());
-    Serial.println(WiFi.status());
-
-    int httpResponseCode = http.GET();
-    Serial.print("HTTP Response code: ");
-    Serial.println(httpResponseCode);
-
-    if (httpResponseCode == 200) {
-        String payload = http.getString();
-        Serial.println(payload);
-
-        JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, payload);
-        if (error) {
-            Serial.print("deserializeJson() returned ");
-            Serial.println(error.c_str());
-            return;
-        }
-
-        updateWeather(doc);
-    }
-    http.end();
-}
-
 void updateInfo() {
     tm time;
     if (!getLocalTime(&time)) {
@@ -353,8 +232,6 @@ void setup() {
     setupMatrix();
     setupWifi();
 
-    dma_display->setBrightness(15);
-
     // Testing out the display
     dma_display->fillScreenRGB888(255, 255, 255);
     delay(500);
@@ -383,19 +260,20 @@ void setup() {
 
     prevMinute15 = time.tm_min;
 
+    // Create Weather Task
+    weatherTask = { .callback = updateWeather };
     xTaskCreatePinnedToCore(
         requestWeatherTask,
         "Weather HTTP",
         8192,
-        NULL,
+        &weatherTask,
         1,
         &weatherTaskHandle,
         1
     );
 
     updateDate(time);
-    http.setReuse(false);
-    requestWeatherTask(); // non-RTOS
+    requestWeatherSync(updateWeather); // non-RTOS
 
     // addScrollingText("The quick brown fox jumps over the lazy dog because why not", &TomThumb, 64, 6, PURPLE);
 }

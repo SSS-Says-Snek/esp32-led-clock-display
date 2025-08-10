@@ -224,8 +224,10 @@ void updateWeather(JsonDocument doc) {
 
     if (current["is_day"]) {
         drawXbm565(57, 0, 5, 7, sun_bits, YELLOW);
+        dma_display->setBrightness(128);
     } else {
         drawXbm565(57, 0, 5, 7, moon_bits, YELLOW);
+        dma_display->setBrightness8(15);
     }
 }
 void scrollTextFinishCallback(ScrollingText& scrollingText) {
@@ -350,6 +352,8 @@ void setup() {
 
     setupMatrix();
     setupWifi();
+
+    dma_display->setBrightness(15);
 
     // Testing out the display
     dma_display->fillScreenRGB888(255, 255, 255);

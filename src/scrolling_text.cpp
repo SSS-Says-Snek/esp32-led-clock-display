@@ -1,4 +1,4 @@
-#include "ScrollingText.h"
+#include "scrolling_text.hpp"
 
 ScrollingText::ScrollingText(MatrixPanel_I2S_DMA* dma_display, std::string text, const GFXfont* font, int textXStart, int textYStart, uint16_t textColor, int animDelay, void (*cb)(ScrollingText&))
     : dma_display(dma_display), text(text), font(font), textXPos(textXStart), textYPos(textYStart), textColor(textColor), animDelay(animDelay), finishCallback(cb) {

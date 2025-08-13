@@ -1,3 +1,5 @@
+#pragma once
+
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
@@ -14,7 +16,6 @@ struct NewsTaskParams {
     void (*callback)(const std::string&);
 };
 
-void requestWeatherGet(HTTPClient& http, void* parameters);
 void requestWeatherTask(void* parameters);
 void requestWeatherSync(void (*callback)(JsonDocument));
 void requestNewsTask(void* parameters);

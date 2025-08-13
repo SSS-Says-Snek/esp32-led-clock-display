@@ -1,12 +1,12 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <time.h>
-#include <utility>
-#include <vector>
-
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
+
+#include <utility>
+#include <vector>
 
 #include <Fonts/FreeSerifBold9pt7b.h>
 #include <Fonts/TomThumb.h>
@@ -15,11 +15,11 @@
 
 
 #include ".env.h" // Defines WIFI_SSID, WIFI_PASSWORD, LAT, LON, and NEWS_API_KEY
-#include "DayNightIcons.h"
-#include "ScrollingText.h"
-#include "ApiTask.h"
-#include "Utils.h"
-#include "Constants.h"
+#include "day_night_icons.hpp"
+#include "scrolling_text.hpp"
+#include "api_task.hpp"
+#include "utils.hpp"
+#include "constants.hpp"
 
 MatrixPanel_I2S_DMA* dma_display = nullptr;
 std::vector<ScrollingText> scrollingTexts;
@@ -45,7 +45,6 @@ TopBarStatus currentTopStatus = TopBarStatus::WEATHER;
 
 TaskParams weatherTask;
 NewsTaskParams newsTask;
-JsonDocument weatherDoc;
 
 void setupMatrix() {
     // LED Matrix setup
@@ -118,7 +117,6 @@ void updateDate(tm time) {
 
 void updateWeather(JsonDocument doc) {
     Serial.println("Updating weather");
-    weatherDoc = doc;
     if (currentTopStatus == TopBarStatus::NEWS) {
         currentTopStatus == TopBarStatus::WEATHER;
         return; // Update after
@@ -159,7 +157,6 @@ void updateWeather(JsonDocument doc) {
 }
 
 void scrollTextFinishCallback(ScrollingText& scrollingText) {
-    Serial.println("EEEE");
     for (int i = 0; i < scrollingTexts.size(); i++) {
         if (scrollingTexts[i] == scrollingText) {
             scrollingText.stop();

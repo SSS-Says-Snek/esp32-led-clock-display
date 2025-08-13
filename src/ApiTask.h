@@ -5,6 +5,15 @@
 struct TaskParams {
     void (*callback)(JsonDocument);
 };
+
+struct NewsTaskParams {
+    std::vector<std::string> newsTexts;
+    int newsTextsIdx;
+    int prevHour;
+    int currHour;
+    void (*callback)(const std::string&);
+};
+
 void requestWeatherGet(HTTPClient& http, void* parameters);
 void requestWeatherTask(void* parameters);
 void requestWeatherSync(void (*callback)(JsonDocument));

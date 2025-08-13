@@ -10,7 +10,7 @@ bool ScrollingText::operator==(const ScrollingText& rhs) {
 
 void ScrollingText::update() {
     unsigned long now = millis();
-    if (now > prevAnimMillis + animDelay) {
+    if (now > prevAnimMillis + animDelay && !stopped) {
         prevAnimMillis = now;
     
         textXPos -= 1;
@@ -20,12 +20,18 @@ void ScrollingText::update() {
             // Do something, finished scrolling
             if (finishCallback) {
                 finishCallback(*this);
+                return; //aaa
             }
         }
 
         dma_display->fillRect(x1, y1, width + 64, height, 0);
         dma_display->setCursor(textXPos, textYPos);
+        // dma_display->setCursor(textXPos, 6); // Why does the news always go to the bottom wtf
         dma_display->setTextColor(textColor);
         dma_display->print(text.c_str());
     }
+}
+
+void ScrollingText::stop() {
+    stopped = true;
 }

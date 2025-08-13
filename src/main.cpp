@@ -19,25 +19,10 @@
 #include "ScrollingText.h"
 #include "ApiTask.h"
 #include "Utils.h"
+#include "Constants.h"
 
 MatrixPanel_I2S_DMA* dma_display = nullptr;
 std::vector<ScrollingText> scrollingTexts;
-
-// RGB565 colors
-uint16_t WHITE = 65535;
-uint16_t BLANK = 0;
-uint16_t PURPLE = 41436;
-uint16_t GREEN = 24230;
-uint16_t BLUE = 9853;
-uint16_t TEXTWHITE = 48667;
-uint16_t ORANGE = 62914;
-uint16_t YELLOW = 65477;
-uint16_t GRAY = 27501;
-uint16_t RED = 57826;
-uint16_t STORM_BLUE = 624;
-uint16_t SNOW_BLUE = 36314;
-uint16_t RAIN_BLUE = 2525;
-uint16_t PINK = 59667;
 
 const char* NTP_SERVER = "pool.ntp.org";
 
@@ -45,8 +30,10 @@ const char* DAYS_OF_WEEK[] = {"Sun", "Mon", "Tues", "Wed", "Thurs", "Fri", "Sat"
 const char* MONTHS[] = {"Jan.", "Feb.", "Mar.", "Apr.", "May.", "Jun.", "Jul.", "Aug.", "Sep.", "Oct.", "Nov.", "Dec."};
 
 int prevMinute = 0;
-int prevMinute15 = 0;
+int prevMinute2 = 0;
+int prevMinute10 = 0;
 TaskHandle_t weatherTaskHandle;
+TaskHandle_t newsTaskHandle;
 
 unsigned long prevUpdateMillis = 0;
 
@@ -57,6 +44,8 @@ enum class TopBarStatus {
 TopBarStatus currentTopStatus = TopBarStatus::WEATHER;
 
 TaskParams weatherTask;
+NewsTaskParams newsTask;
+JsonDocument weatherDoc;
 
 void setupMatrix() {
     // LED Matrix setup
@@ -125,14 +114,17 @@ void updateDate(tm time) {
     dma_display->setCursor(47, 31);
     dma_display->setTextColor(BLUE);
     dma_display->print(time.tm_year + 1900); // POSIX says tm_year's relative to 1900
-
-    Serial.print("Wday:");
-    Serial.println(time.tm_wday);
-    Serial.print("Mon:");
-    Serial.println(time.tm_mon);
 }
 
 void updateWeather(JsonDocument doc) {
+    Serial.println("Updating weather");
+    weatherDoc = doc;
+    if (currentTopStatus == TopBarStatus::NEWS) {
+        currentTopStatus == TopBarStatus::WEATHER;
+        return; // Update after
+    }
+    currentTopStatus == TopBarStatus::WEATHER;
+
     JsonObject current = doc["current"];
 
     char temp[6] = "";
@@ -145,7 +137,7 @@ void updateWeather(JsonDocument doc) {
     int weatherColor;
     std::tie(weatherDesc, weatherColor) = wmoCodeToStr(wmoCode, isDay);
 
-    dma_display->fillRect(0, 0, 64, 7, BLANK);
+    dma_display->fillRect(0, 0, 64, 8, BLANK);
 
     dma_display->setFont(&TomThumb);
     dma_display->setCursor(0, 6);
@@ -165,14 +157,43 @@ void updateWeather(JsonDocument doc) {
         dma_display->setBrightness8(15);
     }
 }
+
 void scrollTextFinishCallback(ScrollingText& scrollingText) {
+    Serial.println("EEEE");
+    for (int i = 0; i < scrollingTexts.size(); i++) {
+        if (scrollingTexts[i] == scrollingText) {
+            scrollingText.stop();
+            Serial.println("Stopped");
+        }
+    }
     scrollingTexts.erase(std::remove(scrollingTexts.begin(), scrollingTexts.end(), scrollingText), scrollingTexts.end());
+
+    dma_display->fillRect(0, 0, 64, 8, BLANK);
+    delay(400);
+
+    currentTopStatus = TopBarStatus::WEATHER;
+
+    dma_display->fillRect(0, 0, 64, 8, BLANK);
+    // updateWeather(weatherDoc); Doesn't work for some reason wtf
+    vTaskResume(weatherTaskHandle);
 }
 
 void addScrollingText(const std::string& text, const GFXfont* font, int startX, int startY, uint16_t color, int animDelay = 40) {
     ScrollingText e = ScrollingText{dma_display, text, font, startX, startY, color, animDelay, scrollTextFinishCallback};
     scrollingTexts.push_back(e);
 }
+
+void updateNews(const std::string& news) {
+    Serial.println(news.c_str());
+    
+    if (currentTopStatus != TopBarStatus::NEWS) {
+        dma_display->fillRect(0, 0, 64, 7, BLANK);
+        addScrollingText(news, &TomThumb, 64, 6, PURPLE, 70);
+    }
+
+    currentTopStatus = TopBarStatus::NEWS;
+}
+
 void updateInfo() {
     tm time;
     if (!getLocalTime(&time)) {
@@ -180,11 +201,12 @@ void updateInfo() {
         return;
     }
 
+    // Every minute
     if (prevMinute != time.tm_min) {
         // Time to update HH:MM part
         prevMinute = time.tm_min;
 
-        dma_display->fillRect(0, 9, 42, 14, BLANK);
+        dma_display->fillRect(0, 9, 43, 14, BLANK);
 
         dma_display->setFont(&FreeSerifBold9pt7b);
         dma_display->setTextColor(ORANGE);
@@ -192,16 +214,34 @@ void updateInfo() {
         dma_display->print(&time, "%I");
         dma_display->print(':');
         dma_display->print(&time, "%M");
+
+        dma_display->drawFastHLine(0, 24, 64, TEXTWHITE);
+        dma_display->drawFastHLine(0, 8, 64, TEXTWHITE);
+
+        newsTask.currHour = time.tm_hour;
     }
 
-    int minDiff = time.tm_min - prevMinute15;
+
+    // Every 2 minutes
+    int minDiff = time.tm_min - prevMinute2;
     if (minDiff < 0) {
         minDiff += 60;
     }
-    if (minDiff == 2) { // Been 15 minutes 
+    if (minDiff == 2) {
         Serial.println("Requesting weather");
         vTaskResume(weatherTaskHandle);
-        prevMinute15 = time.tm_min;
+        prevMinute2 = time.tm_min;
+    }
+
+    // Every 10 minutes
+    minDiff = time.tm_min - prevMinute10;
+    if (minDiff < 0) {
+        minDiff += 60;
+    }
+    if (minDiff == 3) {
+        Serial.println("Requesting news");
+        vTaskResume(newsTaskHandle);
+        prevMinute10 = time.tm_min;
     }
 
     dma_display->fillRect(43, 9, 21, 14, BLANK);
@@ -258,7 +298,8 @@ void setup() {
         return;
     }
 
-    prevMinute15 = time.tm_min;
+    prevMinute2 = time.tm_min;
+    prevMinute10 = time.tm_min;
 
     // Create Weather Task
     weatherTask = { .callback = updateWeather };
@@ -272,10 +313,26 @@ void setup() {
         1
     );
 
+    // Force the news task to update, since it's "been" 3 hours
+    int newsPrevHour = time.tm_hour - 3;
+    if (newsPrevHour < 0) {
+        newsPrevHour += 24;
+    }
+    
+    newsTask = { .newsTexts = std::vector<std::string>{}, .newsTextsIdx = 0, .prevHour = newsPrevHour, .currHour = time.tm_hour, .callback = updateNews };
+    xTaskCreatePinnedToCore(
+        requestNewsTask,
+        "News HTTP",
+        8192,
+        &newsTask,
+        1,
+        &newsTaskHandle,
+        1
+    );
     updateDate(time);
-    requestWeatherSync(updateWeather); // non-RTOS
 
-    // addScrollingText("The quick brown fox jumps over the lazy dog because why not", &TomThumb, 64, 6, PURPLE);
+    vTaskResume(weatherTaskHandle);
+    vTaskResume(newsTaskHandle);
 }
 
 void loop() {

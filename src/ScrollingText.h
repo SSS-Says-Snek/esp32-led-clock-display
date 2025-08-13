@@ -10,6 +10,8 @@ class ScrollingText {
     int textYPos{};
     int animDelay{};
 
+    bool stopped{false};
+
     unsigned long prevAnimMillis{};
 
     int16_t x1{};
@@ -26,4 +28,5 @@ public:
     ScrollingText(MatrixPanel_I2S_DMA* dma_display, std::string text, const GFXfont* font, int textXStart, int textYStart, uint16_t textColor, int animDelay, void (*cb)(ScrollingText&));
     bool operator==(const ScrollingText& rhs);
     void update();
+    void stop();
 };

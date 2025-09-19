@@ -66,9 +66,12 @@ void setupMatrix() {
 }
 
 void setupWifi() {
-    Serial.println(WIFI_SSID);
-    Serial.println(WIFI_PASSWORD);
     // WiFi.config(IPAddress{192, 168, 1, 140}, IPAddress{192, 168, 1, 1}, IPAddress{255, 255, 255, 0}, IPAddress{192, 168, 1, 110}, IPAddress{8, 8, 4, 4});
+    Serial.print("Selected WiFi SSID: ");
+    Serial.println(WIFI_SSID);
+    Serial.print("Selected WiFi Password: ");
+    Serial.println(WIFI_PASSWORD);
+
     WiFi.setHostname("ESP32-Clock");
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -76,11 +79,13 @@ void setupWifi() {
     dma_display->setTextColor(WHITE);
 
     while (WiFi.status() != WL_CONNECTED) {
-        delay(300);
+        delay(400);
         dma_display->print('.');
     }
 
+    Serial.print("ESP32 Local IP: ");
     Serial.println(WiFi.localIP());
+
     dma_display->clearScreen();
     dma_display->setCursor(0, 0);
     dma_display->print("Conn. WiFi");
@@ -116,7 +121,7 @@ void updateDate(tm time) {
 }
 
 void updateWeather(JsonDocument doc) {
-    Serial.println("Updating weather");
+    Serial.println("===== Updating weather =====");
     if (currentTopStatus == TopBarStatus::NEWS) {
         currentTopStatus == TopBarStatus::WEATHER;
         return; // Update after
@@ -160,18 +165,15 @@ void scrollTextFinishCallback(ScrollingText& scrollingText) {
     for (int i = 0; i < scrollingTexts.size(); i++) {
         if (scrollingTexts[i] == scrollingText) {
             scrollingText.stop();
-            Serial.println("Stopped");
         }
     }
-    scrollingTexts.erase(std::remove(scrollingTexts.begin(), scrollingTexts.end(), scrollingText), scrollingTexts.end());
 
+    scrollingTexts.erase(std::remove(scrollingTexts.begin(), scrollingTexts.end(), scrollingText), scrollingTexts.end());
     dma_display->fillRect(0, 0, 64, 8, BLANK);
-    delay(400);
 
     currentTopStatus = TopBarStatus::WEATHER;
 
     dma_display->fillRect(0, 0, 64, 8, BLANK);
-    // updateWeather(weatherDoc); Doesn't work for some reason wtf
     vTaskResume(weatherTaskHandle);
 }
 
@@ -182,6 +184,7 @@ void addScrollingText(const std::string& text, const GFXfont* font, int startX, 
 
 void updateNews(const std::string& news) {
     Serial.println(news.c_str());
+    Serial.println("===== Updating news ======");
     
     if (currentTopStatus != TopBarStatus::NEWS) {
         dma_display->fillRect(0, 0, 64, 7, BLANK);
@@ -225,7 +228,7 @@ void updateInfo() {
         minDiff += 60;
     }
     if (minDiff == 2) {
-        Serial.println("Requesting weather");
+        Serial.println("===== Requesting weather =====");
         vTaskResume(weatherTaskHandle);
         prevMinute2 = time.tm_min;
     }
@@ -236,7 +239,7 @@ void updateInfo() {
         minDiff += 60;
     }
     if (minDiff == 3) {
-        Serial.println("Requesting news");
+        Serial.println("===== Requesting/Cycling news =====");
         vTaskResume(newsTaskHandle);
         prevMinute10 = time.tm_min;
     }

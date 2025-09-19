@@ -98,6 +98,7 @@ void requestNewsTask(void* parameters) {
             }
 
             String payload = http.getString();
+            Serial.println(payload.substring(0, 100) + "...");
             JsonDocument doc;
             DeserializationError error = deserializeJson(doc, payload);
             if (error) {

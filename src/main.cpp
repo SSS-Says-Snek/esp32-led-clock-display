@@ -36,6 +36,7 @@ TaskHandle_t weatherTaskHandle;
 TaskHandle_t newsTaskHandle;
 
 unsigned long prevUpdateMillis = 0;
+unsigned long prevUpdateWifi = 0;
 
 enum class TopBarStatus {
     WEATHER,
@@ -90,7 +91,7 @@ void setupWifi() {
     dma_display->setCursor(0, 0);
     dma_display->print("Conn. WiFi");
 
-    configTime(-5*3600, 0, NTP_SERVER);
+    configTime(-6*3600, 0, NTP_SERVER);
 
     delay(1000);
 }
@@ -341,6 +342,18 @@ void loop() {
         prevUpdateMillis = now;
         updateInfo();
     }
+
+    // if (now > prevUpdateWifi + 60*1000) {
+    //     if ((WiFi.status() != WL_CONNECTED)) {
+    //         dma_display->drawPixel(63, 9, RED);
+    //         Serial.println("Reconnecting to WiFi...");
+    //         WiFi.disconnect();
+    //         WiFi.reconnect();
+    //     } else {
+    //         dma_display->drawPixel(63, 9, BLANK);
+    //     }
+    //     prevUpdateWifi = now;
+    // }
 
     for (ScrollingText& scrollingText : scrollingTexts) {
         scrollingText.update();
